@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 #   tile:   [x0, x1, y1, ywrap] 空だけが写っている四角の模様を繰り返して埋める
 #           （富士山が画面の大半を占める図）
 #   extra:  ほかに消す多角形のリスト（湖に映った逆さ富士など）
+#   vbands: {"x": [x0, x1], "bands": [[y0, y1, x0, x1], ...]} 行の範囲ごとに参照する列を変える vref
 #   vref:   [x0, x1, (tol), (ymax)] 富士山の横の背景の列を、行ごとに延ばして埋める
 #   side:   "left" / "right" 片側の背景色だけで埋める（左右で背景が違う図）
 #   protect: 消さない多角形のリスト（手前の木の幹など）
@@ -51,7 +52,7 @@ OVERRIDES = {
     "umezawa": {"base": [[0.21, 0.50], [0.35, 0.50], [0.48, 0.48], [0.55, 0.45], [0.60, 0.39], [0.65, 0.34], [0.72, 0.31], [0.82, 0.30]]},
     "totomi": {"base": [[0.217, 0.56], [0.23, 0.60], [0.27, 0.60], [0.301, 0.57]]},
     "mishima": {"protect": [[[0.515, 0.0], [0.630, 0.0], [0.630, 1.0], [0.515, 1.0]]], "join": [1, 2], "base": {1: [[0.585, 0.39], [0.585, 0.52], [0.66, 0.52], [0.74, 0.50], [0.88, 0.515]]}},
-    "aoyama": {"vref": [0.64, 0.70], "base": [[0.04, 0.44], [0.15, 0.42], [0.30, 0.43], [0.45, 0.43], [0.55, 0.42], [0.596, 0.36]]},
+    "aoyama": {"vbands": {"x": [0.56, 0.59], "bands": [[0.0, 0.39, 0.16, 0.22]], "blur": 4, "tol": 400}, "base": [[0.04, 0.44], [0.15, 0.42], [0.30, 0.43], [0.45, 0.43], [0.55, 0.42], [0.596, 0.36]]},
     "enoshima": {"base": [[0.79, 0.53], [0.82, 0.545], [0.88, 0.55], [0.92, 0.535]]},
     "gotenyama": {"base": [[0.415, 0.445], [0.43, 0.455], [0.47, 0.46], [0.50, 0.455]]},
     "hakone": {"base": [[0.15, 0.41], [0.20, 0.425], [0.25, 0.43], [0.30, 0.415]]},
@@ -193,13 +194,17 @@ def fill_tile(img, mask, x0, x1, y1, ywrap):
     return out
 
 
-def fill_vref(img, mask, x0, x1, tol=110.0, ymax=None, sample=4):
+def fill_vref(img, mask, x0, x1, tol=110.0, ymax=None, sample=4, bands=None):
     """マスクされた画素を、富士山の横にある背景の列 [x0, x1) の行ごとの色を元に埋める。
     （空 → 海の帯 → 霞 のような、縦に並んだ背景を延ばす）
     左右の境目の色との差が小さいときはその差を横方向に補間して足し、境目をなじませる。"""
     out = img.astype(np.float32).copy()
     h, w = mask.shape
     prof = np.median(img[:, int(x0 * w):int(x1 * w)].astype(np.float32), axis=1)
+    # bands=[[y0, y1, x0, x1], ...] なら、その行の範囲だけ別の列を参照する
+    for by0, by1, bx0, bx1 in (bands or []):
+        a, b = int(by0 * h), int(by1 * h)
+        prof[a:b] = np.median(img[a:b, int(bx0 * w):int(bx1 * w)].astype(np.float32), axis=1)
     if ymax is not None:
         # ymax より下は空ではないので、ymax の行の色を延ばす
         prof[int(ymax * h):] = prof[int(ymax * h) - 1]
@@ -303,7 +308,12 @@ def make(pid, lines, opt):
             keep = (g - r > 20) & (np.abs(g - b) < 35)
         keep = cv2.dilate(keep.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
         mask[keep] = 0
-    if "strips" in opt:
+    if "vbands" in opt:
+        vb = opt["vbands"]
+        filled = fill_vref(img, mask, vb["x"][0], vb["x"][1], tol=vb.get("tol", 110.0), bands=vb["bands"])
+        # 行ごとの補間で出る横すじを、縦方向にぼかして目立たなくする
+        smooth = cv2.GaussianBlur(filled, (1, 0), sigmaX=0.1, sigmaY=vb.get("blur", 6))
+    elif "strips" in opt:
         filled = fill_strips(img, mask, *opt["strips"])
         smooth = filled
     elif "vref" in opt:
