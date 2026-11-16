@@ -75,11 +75,13 @@
     imgOriginal.src = `images/original/${p.id}.jpg`;
     imgNofuji.onerror = () => {
       $("stage-msg").hidden = false;
-      $("stage-msg").innerHTML = `富士山を消した画像が見つかりません<br><code>images/nofuji/${p.id}.jpg</code>`;
+      imgNofuji.style.visibility = "hidden";
+      $("stage-msg").innerHTML = `<div>富士山を消した画像が見つかりません<br><code>images/nofuji/${p.id}.jpg</code></div>`;
       // 寸法だけは原画から取る
       if (imgOriginal.complete && imgOriginal.naturalWidth) setAspect(imgOriginal);
       else imgOriginal.onload = () => setAspect(imgOriginal);
     };
+    imgNofuji.style.visibility = "";
     imgNofuji.onload = () => setAspect(imgNofuji);
     imgNofuji.src = `images/nofuji/${p.id}.jpg`;
   }
