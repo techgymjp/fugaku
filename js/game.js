@@ -109,17 +109,21 @@
     A.startTick();
     startTimer();
 
-    imgOriginal.src = `images/original/${p.id}.jpg`;
+    // 答え（原画）は判定するまで画面に置かない。裏で先読みだけしておく
+    imgOriginal.removeAttribute("src");
+    const answer = new Image();
+    answer.src = `images/original/${p.id}.jpg`;
+    state.answerSrc = answer.src;
+    // 新しい絵が読み込まれるまで、前の問題の絵は見せない
+    imgNofuji.style.visibility = "hidden";
     imgNofuji.onerror = () => {
       $("stage-msg").hidden = false;
-      imgNofuji.style.visibility = "hidden";
       $("stage-msg").innerHTML = `<div>富士山を消した画像が見つかりません<br><code>images/nofuji/${p.id}.jpg</code></div>`;
-      // 寸法だけは原画から取る
-      if (imgOriginal.complete && imgOriginal.naturalWidth) setAspect(imgOriginal);
-      else imgOriginal.onload = () => setAspect(imgOriginal);
+      // 寸法だけは原画から取る（原画は表示しない）
+      if (answer.complete && answer.naturalWidth) setAspect(answer);
+      else answer.onload = () => setAspect(answer);
     };
-    imgNofuji.style.visibility = "";
-    imgNofuji.onload = () => setAspect(imgNofuji);
+    imgNofuji.onload = () => { imgNofuji.style.visibility = ""; setAspect(imgNofuji); };
     imgNofuji.src = `images/nofuji/${p.id}.jpg`;
   }
 
@@ -197,6 +201,7 @@
     A.sfx.reveal();
     state.results.push({ print: p, score: res.score, rank: rk });
     state.revealed = true;
+    imgOriginal.src = state.answerSrc;
     stage.classList.add("revealed");
     $("stage-msg").hidden = true;
     $("buttons-draw").hidden = true;
