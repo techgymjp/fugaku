@@ -38,6 +38,20 @@
 
 GitHub Pages（ブランチ `main` / ルート）でそのまま公開できます。ビルドは不要です。
 
+## 富士山を消した絵の作り方
+
+`images/nofuji/` の画像は、原画と正解の輪郭線から自動で作っています。
+
+```bash
+pip install opencv-python-headless numpy
+python3 tools/make_nofuji.py            # 全図
+python3 tools/make_nofuji.py kanagawa   # 指定した図だけ
+```
+
+稜線と、図ごとに指定した「富士山の下端」で囲んだ範囲を、周りの空や背景の色で塗りつぶします。
+図ごとの調整は `tools/make_nofuji.py` の `OVERRIDES` にあります。
+輪郭線を直したときは、このスクリプトを再実行してください。
+
 ## テスト
 
 ```bash
