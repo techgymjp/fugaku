@@ -141,7 +141,7 @@
   }
 
   // ---- 時計のカチカチ（問題を解いている間） ----
-  let noiseBuf = null, tickTimer = 0, tickOn = false, nextTick = 0, tickN = 0;
+  let noiseBuf = null, tickTimer = 0, tickOn = false, nextTick = 0, tickN = 0, tickInterval = 1.0;
   function noise() {
     if (noiseBuf) return noiseBuf;
     const len = Math.floor(ctx.sampleRate * 0.05);
@@ -166,16 +166,21 @@
     if (!tickOn) return;
     while (nextTick < ctx.currentTime + 0.3) {
       tick(nextTick, tickN % 2 === 0);
-      nextTick += 1.0; tickN++;
+      nextTick += tickInterval; tickN++;
     }
   }
   function startTick() {
     if (!init()) return;
     stopTick();
-    tickOn = true; tickN = 0;
+    tickOn = true; tickN = 0; tickInterval = 1.0;
     nextTick = ctx.currentTime + 0.5;
     tickTimer = setInterval(scheduleTick, 100);
     scheduleTick();
+  }
+  // 残り時間が少ないときは速く刻む（0: 1秒ごと, 1: 0.5秒ごと, 2: 0.25秒ごと）
+  function setTickSpeed(level) {
+    tickInterval = [1.0, 0.5, 0.25][level] || 1.0;
+    if (ctx && tickOn) nextTick = Math.min(nextTick, ctx.currentTime + tickInterval);
   }
   function stopTick() {
     tickOn = false;
@@ -202,6 +207,12 @@
       bell(note(d, 1), now, 0.6, 0.05);
     },
     undo() { if (!ctx) return; pluck(note(0, -1), ctx.currentTime, 0.4, 0.3); },
+    timeUp() {
+      if (!ctx) return; const t = ctx.currentTime;
+      // 拍子木を2回 ＋ 鈴
+      wood(t, 650, 0.6); wood(t + 0.16, 650, 0.6);
+      bell(note(5, 1), t + 0.3, 1.8, 0.2);
+    },
     reveal() {
       if (!ctx) return; const t = ctx.currentTime;
       // 星がきらめくような上昇音
@@ -248,7 +259,7 @@
   document.addEventListener("DOMContentLoaded", () => setEnabled(enabled));
 
   window.FujiAudio = {
-    unlock, startBgm, stopBgm, startTick, stopTick, sfx,
+    unlock, startBgm, stopBgm, startTick, stopTick, setTickSpeed, sfx,
     get enabled() { return enabled; },
   };
 })();

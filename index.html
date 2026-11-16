@@ -35,6 +35,7 @@
       <li>富士山の<strong>稜線（シルエットの輪郭）</strong>を、ドラッグ／指でなぞってください。何本かに分けてなぞってもOK。</li>
       <li>「判定」を押すと、本当の富士山と輪郭線が星座のように現れます。</li>
       <li>なぞった線が本物の輪郭にどれだけ重なったかで点数がつきます。なぞり残しも、はみ出しも減点です。</li>
+      <li>制限時間は1問<strong>30秒</strong>。時間切れになると、そこまでになぞった線で判定します。</li>
     </ol>
     <form method="dialog"><button class="btn primary">はじめる</button></form>
   </dialog>
@@ -55,6 +56,8 @@
         <img id="img-nofuji" alt="富士山が消された浮世絵" draggable="false">
         <img id="img-original" alt="原画" draggable="false">
         <canvas id="canvas"></canvas>
+        <div id="timer" class="timer" aria-live="off"><span class="clock" aria-hidden="true">⏱</span><span id="timer-num">30</span></div>
+        <div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div>
         <div id="stage-msg" class="stage-msg" hidden></div>
         <div id="result-badge" class="result-badge" hidden></div>
       </div>

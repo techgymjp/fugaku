@@ -7,7 +7,7 @@
   // 正解の輪郭線が登録済みの絵だけを出題する
   const PLAYABLE = PRINTS.filter(p => Array.isArray(OUTLINES[p.id]) && OUTLINES[p.id].length);
 
-  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, unlock() {} };
+  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, setTickSpeed() {}, unlock() {} };
   const stage = $("stage");
   const canvas = $("canvas");
   const ctx = canvas.getContext("2d");
@@ -22,6 +22,9 @@
     aspect: 1,            // 画像の 高さ/幅
     revealProgress: 0,
     anim: 0,
+    deadline: 0,          // 制限時間の締め切り（performance.now() の値）
+    timer: 0,
+    tickLevel: 0,
   };
 
   // ---------- 画面切り替え ----------
@@ -58,6 +61,36 @@
   }
 
   // ---------- 出題 ----------
+  // ---------- 制限時間 ----------
+  // 秒（URL の ?time=10 などで変更可。動作確認用）
+  const TIME_LIMIT = Math.max(3, +new URLSearchParams(location.search).get("time") || 30);
+  function startTimer() {
+    stopTimer();
+    state.deadline = performance.now() + TIME_LIMIT * 1000;
+    state.tickLevel = 0;
+    updateTimer();
+    state.timer = setInterval(updateTimer, 100);
+  }
+  function stopTimer() { clearInterval(state.timer); state.timer = 0; }
+  function updateTimer() {
+    const left = Math.max(0, (state.deadline - performance.now()) / 1000);
+    const sec = Math.ceil(left);
+    $("timer-num").textContent = sec;
+    $("timer-bar").style.transform = `scaleX(${left / TIME_LIMIT})`;
+    $("timer").className = "timer" + (left <= 5 ? " danger" : left <= 10 ? " warn" : "");
+    // 残り10秒で倍速、5秒でさらに倍速のカチカチ
+    const level = left <= 5 ? 2 : left <= 10 ? 1 : 0;
+    if (level !== state.tickLevel) { state.tickLevel = level; A.setTickSpeed(level); }
+    if (left <= 0) timeUp();
+  }
+  function timeUp() {
+    stopTimer();
+    if (state.revealed) return;
+    if (state.current) endStroke();
+    A.sfx.timeUp();
+    judge(true);
+  }
+
   function loadQuestion() {
     const p = state.queue[state.index];
     state.strokes = []; state.current = null; state.revealed = false; state.revealProgress = 0;
@@ -74,6 +107,7 @@
     $("hint").textContent = "富士山の輪郭（稜線）をなぞってください";
     $("btn-next").textContent = state.index + 1 >= state.total ? "結果を見る" : "次へ";
     A.startTick();
+    startTimer();
 
     imgOriginal.src = `images/original/${p.id}.jpg`;
     imgNofuji.onerror = () => {
@@ -151,11 +185,14 @@
     return lines.map(l => l.map(([x, y]) => ({ x: x * 1000, y: y * 1000 * state.aspect })));
   }
 
-  $("btn-judge").addEventListener("click", judge);
-  function judge() {
+  $("btn-judge").addEventListener("click", () => judge(false));
+  function judge(timedOut) {
+    if (state.revealed) return;
+    stopTimer();
     const p = state.queue[state.index];
     const res = FujiScoring.evaluate(toPx(OUTLINES[p.id]), toPx(state.strokes));
     const rk = FujiScoring.rank(res.score);
+    if (timedOut && !state.strokes.length) rk.label = "時間切れ";
     A.stopTick();
     A.sfx.reveal();
     state.results.push({ print: p, score: res.score, rank: rk });
@@ -164,7 +201,7 @@
     $("stage-msg").hidden = true;
     $("buttons-draw").hidden = true;
     $("buttons-next").hidden = false;
-    $("hint").textContent = `なぞり具合 ${Math.round(res.coverage * 100)}%　／　正確さ ${Math.round(res.precision * 100)}%`;
+    $("hint").textContent = (timedOut ? "時間切れ！　" : "") + `なぞり具合 ${Math.round(res.coverage * 100)}%　／　正確さ ${Math.round(res.precision * 100)}%`;
     $("score-total").textContent = state.results.reduce((s, r) => s + r.score, 0);
 
     const badge = $("result-badge");
@@ -278,8 +315,8 @@
     $("result-list").innerHTML = state.results.map(r =>
       `<li><span>${r.print.ja}</span><span class="s">${"★".repeat(r.rank.stars)} ${r.score}点</span></li>`).join("");
     show("screen-result");
-    A.stopTick(); A.stopBgm(); A.sfx.final();
+    stopTimer(); A.stopTick(); A.stopBgm(); A.sfx.final();
   }
   $("btn-retry").addEventListener("click", () => start(state.lastMode));
-  $("btn-top").addEventListener("click", () => { A.sfx.click(); A.stopTick(); A.stopBgm(); show("screen-title"); });
+  $("btn-top").addEventListener("click", () => { A.sfx.click(); stopTimer(); A.stopTick(); A.stopBgm(); show("screen-title"); });
 })();
