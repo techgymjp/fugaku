@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: radial-gradient(ellipse at 50% 120%, var(--bg2), var(--bg) 70%);
