@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>富嶽三十六景　富士山どこだっけ？</title>
+  <meta name="description" content="富士山が消えた北斎の富嶽三十六景。星座をなぞるように、富士山のシルエットの輪郭をなぞって当てよう。">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="sky" aria-hidden="true"></div>
+
+  <!-- タイトル画面 -->
+  <section id="screen-title" class="screen active">
+    <div class="title-box">
+      <p class="sub">葛飾北斎</p>
+      <h1>富嶽三十六景<br><span>富士山どこだっけ？</span></h1>
+      <p class="lead">絵から富士山が消えてしまった！<br>星座をなぞるように、富士山があったはずの<strong>輪郭</strong>を指でなぞろう。</p>
+      <div class="menu">
+        <button class="btn primary" data-start="5">五問勝負</button>
+        <button class="btn" data-start="10">十問勝負</button>
+        <button class="btn" data-start="all">全図制覇</button>
+      </div>
+      <p id="title-note" class="note"></p>
+      <button class="link" id="btn-howto">遊び方</button>
+    </div>
+  </section>
+
+  <!-- 遊び方 -->
+  <dialog id="howto">
+    <h2>遊び方</h2>
+    <ol>
+      <li>富士山が消された浮世絵が表示されます。</li>
+      <li>富士山の<strong>稜線（シルエットの輪郭）</strong>を、ドラッグ／指でなぞってください。何本かに分けてなぞってもOK。</li>
+      <li>「判定」を押すと、本当の富士山と輪郭線が星座のように現れます。</li>
+      <li>なぞった線が本物の輪郭にどれだけ重なったかで点数がつきます。なぞり残しも、はみ出しも減点です。</li>
+    </ol>
+    <form method="dialog"><button class="btn primary">はじめる</button></form>
+  </dialog>
+
+  <!-- 出題画面 -->
+  <section id="screen-play" class="screen">
+    <header class="play-head">
+      <div class="progress"><span id="q-index">1</span> / <span id="q-total">10</span></div>
+      <div class="q-title">
+        <div id="q-name" class="name">？？？</div>
+        <div id="q-yomi" class="yomi"></div>
+      </div>
+      <div class="total">得点 <span id="score-total">0</span></div>
+    </header>
+
+    <div class="stage-wrap">
+      <div id="stage" class="stage">
+        <img id="img-nofuji" alt="富士山が消された浮世絵" draggable="false">
+        <img id="img-original" alt="原画" draggable="false">
+        <canvas id="canvas"></canvas>
+        <div id="stage-msg" class="stage-msg" hidden></div>
+        <div id="result-badge" class="result-badge" hidden></div>
+      </div>
+    </div>
+
+    <footer class="play-foot">
+      <p id="hint" class="hint">富士山の輪郭をなぞってください</p>
+      <div class="buttons" id="buttons-draw">
+        <button class="btn" id="btn-undo">一筆戻す</button>
+        <button class="btn" id="btn-clear">全部消す</button>
+        <button class="btn primary" id="btn-judge" disabled>判定</button>
+      </div>
+      <div class="buttons" id="buttons-next" hidden>
+        <button class="btn" id="btn-toggle">見比べる</button>
+        <button class="btn primary" id="btn-next">次へ</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- 結果画面 -->
+  <section id="screen-result" class="screen">
+    <div class="result-box">
+      <h2>結果</h2>
+      <p class="final"><span id="final-score">0</span><small> 点</small></p>
+      <p id="final-rank" class="final-rank"></p>
+      <ul id="result-list" class="result-list"></ul>
+      <div class="menu">
+        <button class="btn primary" id="btn-retry">もう一度</button>
+        <button class="btn" id="btn-top">タイトルへ</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/prints.js"></script>
+  <script src="js/outlines.js"></script>
+  <script src="js/scoring.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

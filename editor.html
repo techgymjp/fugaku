@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>輪郭線エディタ</title>
+  <style>
+    :root { --bg:#14182b; --ink:#eee; --muted:#9aa; --gold:#f2c14e; --line:#ffffff22; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, sans-serif; font-size:14px; display:grid; grid-template-columns: 260px 1fr; height:100vh; }
+    aside { border-right:1px solid var(--line); overflow-y:auto; padding:8px; }
+    aside h1 { font-size:15px; margin:4px 4px 8px; }
+    aside ul { list-style:none; padding:0; margin:0; }
+    aside li { padding:6px 8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; }
+    aside li:hover { background:#ffffff10; }
+    aside li.active { background:#2c4f8f; }
+    aside li .ok { color:var(--gold); }
+    main { display:flex; flex-direction:column; min-width:0; }
+    .bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border-bottom:1px solid var(--line); }
+    .bar .t { font-weight:bold; margin-right:8px; }
+    button, label.btn { font:inherit; color:var(--ink); background:#ffffff12; border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; }
+    button:hover { background:#ffffff22; }
+    .wrap { flex:1; overflow:auto; display:flex; align-items:flex-start; justify-content:center; padding:12px; }
+    .stage { position:relative; }
+    .stage img { display:block; max-width:none; }
+    .stage img.over { position:absolute; inset:0; opacity:0; }
+    canvas { position:absolute; inset:0; cursor:crosshair; }
+    .help { color:var(--muted); padding:6px 8px; border-top:1px solid var(--line); line-height:1.6; }
+    textarea { width:100%; height:120px; background:#0008; color:var(--ink); border:1px solid var(--line); font:12px monospace; }
+    kbd { background:#ffffff18; border-radius:3px; padding:0 4px; }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>富士山の輪郭線エディタ</h1>
+    <ul id="list"></ul>
+  </aside>
+  <main>
+    <div class="bar">
+      <span class="t" id="title">-</span>
+      <button id="new-line">新しい線 (N)</button>
+      <button id="undo">点を戻す (Z)</button>
+      <button id="clear">この絵の線を全消去</button>
+      <label><input type="checkbox" id="show-nofuji"> 富士山なし画像を重ねる (半透明)</label>
+      <label>拡大 <input type="range" id="zoom" min="0.5" max="3" step="0.1" value="1"></label>
+      <span style="flex:1"></span>
+      <button id="export">outlines.js を書き出し</button>
+      <label class="btn">読み込み<input type="file" id="import" accept=".js,.json" hidden></label>
+    </div>
+    <div class="wrap"><div class="stage" id="stage">
+      <img id="img">
+      <img id="img-over" class="over">
+      <canvas id="cv"></canvas>
+    </div></div>
+    <div class="help">
+      原画の上で、富士山のシルエットの<b>輪郭（稜線）</b>に沿ってクリックで点を打ちます。点はドラッグで移動、右クリックで削除。
+      手前の物で輪郭が途切れている場合は <kbd>N</kbd> で別の線を始めてください。
+      編集内容はブラウザに自動保存されます。最後に「書き出し」して <code>js/outlines.js</code> を置き換えてください。
+      <textarea id="out" readonly hidden></textarea>
+    </div>
+  </main>
+
+  <script src="js/prints.js"></script>
+  <script src="js/outlines.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const KEY = "fugaku-outlines-v1";
+    let data = {};
+    try { data = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+    // 保存が無い絵は js/outlines.js の内容から始める
+    for (const [k, v] of Object.entries(window.FUJI_OUTLINES || {})) if (!data[k]) data[k] = JSON.parse(JSON.stringify(v));
+
+    const $ = id => document.getElementById(id);
+    const cv = $("cv"), ctx = cv.getContext("2d"), img = $("img"), over = $("img-over");
+    let cur = null, lineIdx = 0, drag = null, zoom = 1;
+
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} renderList(); }
+    function lines() { return data[cur.id] || (data[cur.id] = []); }
+
+    function renderList() {
+      $("list").innerHTML = PRINTS.map((p, i) => {
+        const n = (data[p.id] || []).filter(l => l.length > 1).length;
+        return `<li data-i="${i}" class="${cur && cur.id === p.id ? "active" : ""}"><span>${i + 1}. ${p.ja}</span><span class="ok">${n ? "✔" : ""}</span></li>`;
+      }).join("");
+    }
+    $("list").addEventListener("click", e => { const li = e.target.closest("li"); if (li) select(+li.dataset.i); });
+
+    function select(i) {
+      cur = PRINTS[i];
+      $("title").textContent = `${cur.ja}（${cur.id}）`;
+      lineIdx = Math.max(0, lines().length - 1);
+      img.onload = fit;
+      img.onerror = () => { $("title").textContent += " — images/original/" + cur.id + ".jpg が見つかりません"; };
+      img.src = `images/original/${cur.id}.jpg`;
+      over.src = `images/nofuji/${cur.id}.jpg`;
+      renderList();
+    }
+
+    function fit() {
+      const w = img.naturalWidth * zoom * Math.min(1, 1000 / img.naturalWidth);
+      const h = w * img.naturalHeight / img.naturalWidth;
+      for (const el of [img, over]) { el.style.width = w + "px"; el.style.height = h + "px"; }
+      cv.width = w; cv.height = h;
+      draw();
+    }
+    $("zoom").addEventListener("input", e => { zoom = +e.target.value; fit(); });
+    $("show-nofuji").addEventListener("change", e => { over.style.opacity = e.target.checked ? .55 : 0; });
+
+    function draw() {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      if (!cur) return;
+      lines().forEach((l, li) => {
+        const active = li === lineIdx;
+        ctx.strokeStyle = active ? "#ff4040" : "#40c0ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        l.forEach(([x, y], i) => i ? ctx.lineTo(x * cv.width, y * cv.height) : ctx.moveTo(x * cv.width, y * cv.height));
+        ctx.stroke();
+        for (const [x, y] of l) {
+          ctx.fillStyle = active ? "#ffdd00" : "#fff";
+          ctx.beginPath(); ctx.arc(x * cv.width, y * cv.height, 4, 0, 7); ctx.fill();
+          ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
+        }
+      });
+    }
+
+    function pos(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; }
+    function hit(p) {
+      const L = lines();
+      for (let li = 0; li < L.length; li++) for (let i = 0; i < L[li].length; i++) {
+        const [x, y] = L[li][i];
+        if (Math.hypot((x - p[0]) * cv.width, (y - p[1]) * cv.height) < 8) return { li, i };
+      }
+      return null;
+    }
+    const r4 = v => Math.round(v * 10000) / 10000;
+
+    cv.addEventListener("contextmenu", e => e.preventDefault());
+    cv.addEventListener("pointerdown", e => {
+      if (!cur) return;
+      const p = pos(e), h = hit(p);
+      if (e.button === 2) { if (h) { lines()[h.li].splice(h.i, 1); if (!lines()[h.li].length) lines().splice(h.li, 1); lineIdx = Math.min(lineIdx, Math.max(0, lines().length - 1)); save(); draw(); } return; }
+      if (h) { drag = h; lineIdx = h.li; cv.setPointerCapture(e.pointerId); draw(); return; }
+      const L = lines();
+      if (!L[lineIdx]) { L.push([]); lineIdx = L.length - 1; }
+      L[lineIdx].push([r4(p[0]), r4(p[1])]);
+      save(); draw();
+    });
+    cv.addEventListener("pointermove", e => {
+      if (!drag) return;
+      const p = pos(e);
+      lines()[drag.li][drag.i] = [r4(Math.min(1, Math.max(0, p[0]))), r4(Math.min(1, Math.max(0, p[1])))];
+      draw();
+    });
+    cv.addEventListener("pointerup", () => { if (drag) { drag = null; save(); } });
+
+    function newLine() { if (!cur) return; const L = lines(); if (L.length && !L[L.length - 1].length) return; L.push([]); lineIdx = L.length - 1; draw(); }
+    function undo() { if (!cur) return; const l = lines()[lineIdx]; if (l && l.length) l.pop(); if (l && !l.length && lines().length > 1) { lines().splice(lineIdx, 1); lineIdx = lines().length - 1; } save(); draw(); }
+    $("new-line").onclick = newLine;
+    $("undo").onclick = undo;
+    $("clear").onclick = () => { if (cur && confirm("この絵の線をすべて消しますか？")) { data[cur.id] = []; lineIdx = 0; save(); draw(); } };
+    document.addEventListener("keydown", e => {
+      if (e.target.tagName === "TEXTAREA") return;
+      if (e.key === "n" || e.key === "N") newLine();
+      if ((e.key === "z" || e.key === "Z") && !e.metaKey && !e.ctrlKey) undo();
+    });
+
+    function serialize() {
+      const out = {};
+      for (const p of PRINTS) {
+        const L = (data[p.id] || []).filter(l => l.length > 1);
+        if (L.length) out[p.id] = L;
+      }
+      let s = "// 各絵の富士山の輪郭線（稜線）。editor.html で作成。\n";
+      s += "// 形式: { id: [ 線, 線, ... ] }  線 = [[x, y], ...]  座標は画像の幅・高さに対する割合 (0〜1)\n";
+      s += "window.FUJI_OUTLINES = {\n";
+      s += Object.entries(out).map(([k, L]) => `  ${JSON.stringify(k)}: ${JSON.stringify(L)}`).join(",\n");
+      s += "\n};\n";
+      return s;
+    }
+    $("export").onclick = () => {
+      const s = serialize();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([s], { type: "text/javascript" }));
+      a.download = "outlines.js"; a.click();
+      $("out").hidden = false; $("out").value = s;
+    };
+    $("import").onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const txt = await f.text();
+      const json = txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1);
+      try { Object.assign(data, JSON.parse(json)); save(); if (cur) draw(); } catch (err) { alert("読み込めませんでした: " + err.message); }
+    };
+
+    renderList();
+    select(0);
+  })();
+  </script>
+</body>
+</html>
