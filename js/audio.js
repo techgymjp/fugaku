@@ -265,6 +265,9 @@
 
   window.FujiAudio = {
     unlock, startBgm, stopBgm, startTick, stopTick, setTickSpeed, sfx,
+    // 広告の表示中や、アプリが裏に回ったときに音をまとめて止める / 戻す
+    suspend() { if (ctx && ctx.state === "running") ctx.suspend(); },
+    resume() { if (ctx && ctx.state === "suspended" && !document.hidden) ctx.resume(); },
     get enabled() { return enabled; },
   };
 })();

@@ -1,0 +1,8 @@
+{
+  "appId": "jp.techgym.fugaku",
+  "appName": "富士山どこ？",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0b1026"
+  }
+}

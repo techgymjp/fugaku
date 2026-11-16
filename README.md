@@ -66,3 +66,44 @@ node tools/test-scoring.js
 ## 画像について
 
 北斎の原画はパブリックドメインです。画像は Wikimedia Commons などから取得できます。
+
+## Android アプリ
+
+[Capacitor](https://capacitorjs.com/) でゲームのファイルをアプリに同梱し、Android アプリにしています（オフラインで遊べます）。
+構成は techgymjp/jet-fighter の `docs/ANDROID_PORTING.md`、techgymjp/jackal と同じです。
+
+- パッケージ名: `jp.techgym.fugaku`
+- 横画面固定・全画面・プレイ中は画面を消さない
+- 一時停止: 出題中の ⏸ ボタン・戻るボタン・別アプリへの切り替えで止まる（制限時間も止まり、絵は隠れる）
+- 戻るボタン: 出題中は一時停止（一時停止中なら再開）、あそびかたはタイトルへ、タイトル・結果画面ではアプリを終了
+- シェア: 結果画面の「結果をシェア」で Android の共有メニュー（紹介記事 https://techgym.jp/column/claude-code-game-fugaku/ のリンクつき）
+- 広告（AdMob）
+  - バナー: タイトル・あそびかた・一時停止・結果画面の下中央（出題中は絵や操作ボタンと重なるので出さない）
+  - 全画面広告（インタースティシャル）: プレイを始める（タイトル・あそびかたから）、タイトルへ戻る（あそびかた・一時停止・結果画面から）、一時停止からの再開、結果画面の「もう一度」のたびに毎回
+  - リワード広告（チート）: 外した絵（65 点未満）で「広告を見てこの絵をやり直す」（1 ゲーム 5 回まで。答えの輪郭が描き終わるのを見届けられるよう 2.5 秒後に出し、6 秒で自動的に消える）。
+    見終わるとその絵の成績を取り消して、同じ絵をもう一度。使ったことは結果画面とシェア文に「やり直しN回」と出る
+  - EU など同意が必要な地域ではタイトル画面に「広告の設定」
+- タイトル画面にバージョン（ビルド番号）・プライバシーポリシーへのリンク・モードごとのベスト記録
+
+ビルドは GitHub Actions（`.github/workflows/android.yml`）で行います。
+
+1. `npm ci` → `npm run build:app`（`www/` に Web ファイルをコピーし、Web 版だけの部分〔動作確認用の `?time=` `?lang=`〕を取り除き、`js/ads-config.js` と `js/build-info.js` を生成）→ `npx cap sync android` → `./gradlew assembleDebug`
+2. 既定ブランチなら、Release `android-latest` の `fugaku.apk` を差し替え（動作確認用・テスト広告）
+   - リリース画面: `https://github.com/techgymjp/fugaku/releases/tag/android-latest`（QR コード: `docs/apk-qr.png`）
+   - APK 直接: `https://github.com/techgymjp/fugaku/releases/latest/download/fugaku.apk`
+3. GitHub Secrets に署名鍵（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）があれば、本番広告で署名付き AAB を作り Artifact に上げる
+
+AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml` の `admob_app_id`、本番の広告ユニット ID は `js/ads.js` の `UNITS.android.production` にあります。
+本番の ID が届くまでは、アプリ ID は Google 公式のテスト用、本番の広告ユニットは空（＝ Google Play 用の AAB では広告を出さない）です。
+動作確認用 APK はどれもテスト広告、Google Play 用の AAB は本番の広告です。
+
+手元で試すとき: `npm install` → `npm run android:sync` → `npm run android:open`（Android Studio が必要）。
+アイコンと起動画面は `python3 tools/make_icons.py` で `assets/` に元画像を作り、`npx @capacitor/assets generate --android` で生成しています。
+
+Web 版（GitHub Pages）はこれまでどおりリポジトリのルートをそのまま公開しています（ビルド不要。Capacitor がないので広告などは動きません）。
+
+## ライセンス
+
+著作権はテックジム株式会社に帰属します（All rights reserved）。許可なく複製・改変・再配布すること、Web サイトやアプリとして公開・販売すること、名前・アイコン・画像を使うことを禁止します。
+テックジムの受講生が学習目的で複製・改変することは許可します（アプリストアでの公開・広告の掲載・販売などの商用利用は不可）。
+葛飾北斎の原画（`images/original/`）はパブリックドメインです。詳しくは `LICENSE` を見てください。

@@ -7,7 +7,13 @@
   // 正解の輪郭線が登録済みの絵だけを出題する
   const PLAYABLE = PRINTS.filter(p => Array.isArray(OUTLINES[p.id]) && OUTLINES[p.id].length);
 
-  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, setTickSpeed() {}, unlock() {} };
+  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, setTickSpeed() {}, unlock() {}, suspend() {}, resume() {} };
+  // 広告（Android アプリのときだけ動く。Web 版では何もしない）
+  const Ads = window.Ads || { available: false, canReward: false, showing: false, privacyOptionsRequired: false, initDone: Promise.resolve(), showInterstitial: async () => {}, showRewarded: async () => "unavailable", setBanner() {}, showPrivacyOptions: async () => {} };
+  // Android / iOS アプリ(Capacitor)で動いているか。Web 版では Capacitor がないので何もしない
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null);
+  const SHARE_URL = "https://techgym.jp/column/claude-code-game-fugaku/"; // 紹介記事
   const T = (k, v) => window.I18N.t(k, v);
   const EN = () => window.I18N.lang === "en";
   const stage = $("stage");
@@ -27,12 +33,17 @@
     deadline: 0,          // 制限時間の締め切り（performance.now() の値）
     timer: 0,
     tickLevel: 0,
+    paused: false,
+    remaining: 0,         // ポーズ中に残っている制限時間（ミリ秒）
+    redoUsed: 0,          // このゲームでリワード広告のやり直しを使った回数
   };
 
   // ---------- 画面切り替え ----------
   function show(id) {
     document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
+    updateBanner();
   }
+  const current = () => (document.querySelector(".screen.active") || {}).id;
 
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -43,14 +54,30 @@
   function titleNote() {
     $("title-note").textContent = PLAYABLE.length ? T("title.count", { n: PLAYABLE.length }) : T("title.empty");
   }
+  // ベスト記録（モードごとの合計点）
+  const modeKey = (n) => (n === Infinity ? "all" : String(n));
+  function loadBest(key) { try { return +localStorage.getItem("fugaku-best-" + key) || 0; } catch (e) { return 0; } }
+  function saveBest(key, v) { try { localStorage.setItem("fugaku-best-" + key, String(v)); } catch (e) { /* 保存できなくても続ける */ } }
+  function showBest() {
+    document.querySelectorAll("[data-best]").forEach(el => {
+      const b = loadBest(el.dataset.best);
+      el.textContent = b ? T("best", { n: b }) : "";
+    });
+  }
+
   document.querySelectorAll("[data-start]").forEach(b => {
     b.disabled = PLAYABLE.length === 0;
-    b.addEventListener("click", () => start(b.dataset.start === "all" ? Infinity : +b.dataset.start));
+    b.addEventListener("click", () => { A.unlock(); withInterstitial(() => start(b.dataset.start === "all" ? Infinity : +b.dataset.start)); });
   });
-  $("btn-howto").addEventListener("click", () => { A.unlock(); A.sfx.click(); $("howto").showModal(); });
+  $("btn-howto").addEventListener("click", () => { A.unlock(); A.sfx.click(); show("screen-howto"); });
+  $("btn-howto-start").addEventListener("click", () => { A.unlock(); withInterstitial(() => start(5)); });
+  $("btn-howto-back").addEventListener("click", () => { A.sfx.click(); withInterstitial(goTitle); });
 
   function start(n) {
     A.unlock(); A.sfx.start(); A.startBgm();
+    closeRedo();
+    state.paused = false; $("pause").hidden = true;
+    state.redoUsed = 0;
     state.lastMode = n;
     state.queue = shuffle(PLAYABLE.slice()).slice(0, Math.min(n, PLAYABLE.length));
     state.total = state.queue.length;
@@ -62,13 +89,15 @@
     loadQuestion();
   }
 
-  // ---------- 出題 ----------
   // ---------- 制限時間 ----------
-  // 秒（URL の ?time=10 などで変更可。動作確認用）
-  const TIME_LIMIT = Math.max(3, +new URLSearchParams(location.search).get("time") || 30);
-  function startTimer() {
+  let TIME_LIMIT = 30;  // 秒
+  // web-only:start
+  // Web 版だけ、URL の ?time=10 などで変更できる（動作確認用。アプリ用のビルドでは取り除く）
+  TIME_LIMIT = Math.max(3, +new URLSearchParams(location.search).get("time") || 30);
+  // web-only:end
+  function startTimer(ms) {
     stopTimer();
-    state.deadline = performance.now() + TIME_LIMIT * 1000;
+    state.deadline = performance.now() + (ms || TIME_LIMIT * 1000);
     state.tickLevel = 0;
     updateTimer();
     state.timer = setInterval(updateTimer, 100);
@@ -93,8 +122,10 @@
     judge(true);
   }
 
+  // ---------- 出題 ----------
   function loadQuestion() {
     const p = state.queue[state.index];
+    closeRedo();
     state.strokes = []; state.current = null; state.revealed = false; state.revealProgress = 0;
     cancelAnimationFrame(state.anim);
     stage.classList.remove("revealed", "compare");
@@ -156,7 +187,7 @@
             Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
   }
   canvas.addEventListener("pointerdown", (e) => {
-    if (state.revealed) return;
+    if (state.revealed || state.paused) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     state.current = [toNorm(e)];
@@ -223,11 +254,14 @@
       else { badge.hidden = false; A.sfx.result(rk.stars, rk.hit); }
     };
     state.anim = requestAnimationFrame(step);
+    // 外したら、リワード広告で「この絵をやり直す」を出す（アプリのみ）
+    if (!rk.hit) offerRedo();
   }
 
   $("btn-toggle").addEventListener("click", () => { A.sfx.click(); stage.classList.toggle("compare"); });
   $("btn-next").addEventListener("click", () => {
     A.sfx.click();
+    closeRedo();
     state.index++;
     if (state.index >= state.total) showResult(); else loadQuestion();
   });
@@ -254,7 +288,7 @@
     ctx.restore();
 
     // 正解の輪郭線（星座風）
-    if (state.revealed) {
+    if (state.revealed && state.queue[state.index]) {
       const lines = OUTLINES[state.queue[state.index].id];
       const total = lines.reduce((s, l) => s + polyLen(l.map(P)), 0);
       let budget = total * state.revealProgress;
@@ -310,16 +344,203 @@
 
   // ---------- 結果 ----------
   function showResult() {
+    cancelAnimationFrame(state.anim);
     const sum = state.results.reduce((s, r) => s + r.score, 0);
     const avg = state.results.length ? sum / state.results.length : 0;
     $("final-score").textContent = sum;
+    state.finalScore = sum;
     state.finalLevel = avg >= 85 ? 1 : avg >= 70 ? 2 : avg >= 50 ? 3 : avg >= 30 ? 4 : 5;
+    const key = modeKey(state.lastMode);
+    state.newBest = sum > loadBest(key);
+    if (state.newBest) saveBest(key, sum);
+    $("share-msg").textContent = "";
     setFinalTexts();
+    closeRedo();
     show("screen-result");
     stopTimer(); A.stopTick(); A.stopBgm(); A.sfx.final();
   }
-  $("btn-retry").addEventListener("click", () => start(state.lastMode));
-  $("btn-top").addEventListener("click", () => { A.sfx.click(); stopTimer(); A.stopTick(); A.stopBgm(); show("screen-title"); });
+  $("btn-retry").addEventListener("click", () => withInterstitial(() => start(state.lastMode)));
+  $("btn-top").addEventListener("click", () => { A.sfx.click(); withInterstitial(goTitle); });
+
+  function goTitle() {
+    stopTimer(); A.stopTick(); A.stopBgm(); closeRedo();
+    state.paused = false; $("pause").hidden = true;
+    showBest();
+    show("screen-title");
+  }
+
+  // ---------- 全画面広告(アプリのみ) ----------
+  // 「プレイを始める」「タイトルへ戻る」「ポーズからの再開」「もう一度」のたびに出す
+  let adBusy = false;
+  async function withInterstitial(next) {
+    if (adBusy) return;
+    if (Ads.available) {
+      adBusy = true;
+      await Ads.showInterstitial(3000);
+      adBusy = false;
+    }
+    next();
+  }
+
+  // ---------- 一時停止 ----------
+  // 止めている間は制限時間も止め、絵は隠す（止めている間に答えを考えられないように）
+  function pause() {
+    if (current() !== "screen-play" || state.paused) return;
+    state.paused = true;
+    if (state.current) endStroke();
+    if (!state.revealed) {
+      state.remaining = Math.max(0, state.deadline - performance.now());
+      stopTimer();
+      A.stopTick();
+    }
+    $("pause").hidden = false;
+    updateBanner();
+  }
+  function resume() {
+    if (!state.paused) return;
+    state.paused = false;
+    $("pause").hidden = true;
+    if (!state.revealed) {
+      A.startTick();
+      state.tickLevel = 0;
+      startTimer(state.remaining);
+    }
+    updateBanner();
+  }
+  $("btn-pause").addEventListener("click", () => { A.sfx.click(); pause(); });
+  $("btn-resume").addEventListener("click", () => { A.sfx.click(); withInterstitial(resume); });
+  $("btn-pause-top").addEventListener("click", () => { A.sfx.click(); withInterstitial(goTitle); });
+
+  // 別のアプリに切り替えたら（裏に回ったら）一時停止して音を止める（広告の表示中は広告側が音を止めている）
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (!adBusy && !Ads.showing) pause();
+      A.suspend();
+    } else if (!Ads.showing) {
+      A.resume();
+    }
+  });
+
+  // Android の戻るボタン: 出題中はポーズ（ポーズ中なら再開）、あそびかたはタイトルへ、タイトル・結果画面ではアプリを閉じる
+  if (plugin("App")) {
+    plugin("App").addListener("backButton", () => {
+      if (adBusy) return;
+      const id = current();
+      if (id === "screen-title" || id === "screen-result") plugin("App").exitApp();
+      else if (id === "screen-howto") withInterstitial(goTitle);
+      else if (state.paused) withInterstitial(resume);
+      else pause();
+    });
+  }
+
+  // ---------- リワード広告のチート: 外した絵をもう一度なぞる(アプリのみ・1 ゲーム 5 回まで) ----------
+  // 判定で外したら（65 点未満）、答えの輪郭が描き終わるのを見届けられるよう少し待ってから案内を出し、
+  // 数秒で自動的に消す。広告を最後まで見たときだけ、その絵の成績を取り消して同じ絵をもう一度出す
+  const REDO_DELAY = 2500;
+  const REDO_WAIT = 6;
+  const REDO_MAX = 5;
+  const redo = { active: false, busy: false, left: 0, timer: 0, pending: 0 };
+  function offerRedo() {
+    if (!Ads.canReward || state.redoUsed >= REDO_MAX) return;
+    clearTimeout(redo.pending);
+    redo.pending = setTimeout(showRedo, REDO_DELAY);
+  }
+  function showRedo() {
+    redo.pending = 0;
+    if (current() !== "screen-play" || !state.revealed) return;
+    Object.assign(redo, { active: true, busy: false, left: REDO_WAIT });
+    $("redo-watch").disabled = false;
+    $("redo-watch").textContent = T("redo.watch");
+    $("redo-note").textContent = T("redo.note", { n: REDO_MAX - state.redoUsed });
+    $("redo-next").textContent = T("redo.next", { s: redo.left });
+    $("redo").hidden = false;
+    clearInterval(redo.timer);
+    redo.timer = setInterval(() => {
+      if (redo.busy || state.paused) return;
+      redo.left--;
+      $("redo-next").textContent = T("redo.next", { s: Math.max(0, redo.left) });
+      if (redo.left <= 0) closeRedo();
+    }, 1000);
+  }
+  function closeRedo() {
+    clearTimeout(redo.pending); redo.pending = 0;
+    clearInterval(redo.timer); redo.timer = 0;
+    redo.active = false;
+    $("redo").hidden = true;
+  }
+  $("redo-next").addEventListener("click", () => { A.sfx.click(); closeRedo(); });
+  $("redo-watch").addEventListener("click", async () => {
+    if (!redo.active || redo.busy) return;
+    redo.busy = true;
+    $("redo-watch").disabled = true;
+    $("redo-watch").textContent = T("redo.loading");
+    adBusy = true;
+    const result = await Ads.showRewarded();
+    adBusy = false;
+    if (!redo.active) return;
+    if (result === "unavailable") {
+      $("redo-note").textContent = T("redo.fail");
+      setTimeout(closeRedo, 2000);
+      return;
+    }
+    closeRedo();
+    if (result !== "rewarded") return;
+    // 外した絵の成績を取り消して、同じ絵をもう一度
+    state.results.pop();
+    state.redoUsed++;
+    $("score-total").textContent = state.results.reduce((s, r) => s + r.score, 0);
+    loadQuestion();
+  });
+
+  // ---------- バナー広告: タイトル・あそびかた・ポーズ・結果画面だけ（出題中は絵や操作ボタンと重なるので出さない） ----------
+  function updateBanner() {
+    const id = current();
+    const want = id === "screen-title" || id === "screen-howto" || id === "screen-result" || (id === "screen-play" && state.paused);
+    Ads.setBanner(want);
+  }
+  if (Ads.available) document.body.classList.add("with-banner");
+
+  // ---------- シェア ----------
+  function shareText() {
+    return T("share.text", {
+      n: state.results.length,
+      score: state.finalScore || 0,
+      rank: T("title." + state.finalLevel),
+      redo: state.redoUsed ? T("share.redo", { n: state.redoUsed }) : "",
+    });
+  }
+  async function shareResult() {
+    const text = shareText();
+    // アプリでは Android の共有メニューを出す
+    const nativeShare = plugin("Share");
+    if (nativeShare) {
+      try { await nativeShare.share({ title: T("share.title"), text, url: SHARE_URL, dialogTitle: T("share.dialog") }); } catch (e) { /* キャンセル */ }
+      return;
+    }
+    if (navigator.share) {
+      try { await navigator.share({ title: T("share.title"), text, url: SHARE_URL }); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    copyResult(text + "\n" + SHARE_URL);
+  }
+  async function copyResult(text) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { /* 非対応 */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); ok = document.execCommand("copy"); ta.remove();
+      } catch (e) { /* 非対応 */ }
+    }
+    $("share-msg").textContent = T(ok ? "share.copied" : "share.copyFail");
+  }
+  $("btn-share").addEventListener("click", () => { A.sfx.click(); shareResult(); });
+
+  // ---------- タイトル画面の下: バージョン（アプリ版）・プライバシーポリシー・広告の設定（EU など） ----------
+  if (window.APP_VERSION && window.APP_VERSION !== "dev") $("build-info").textContent = window.APP_VERSION;
+  Ads.initDone.then(() => { if (Ads.privacyOptionsRequired) $("ad-privacy").hidden = false; });
+  $("ad-privacy-link").addEventListener("click", (e) => { e.preventDefault(); Ads.showPrivacyOptions(); });
 
   // ---------- 言語の切り替え ----------
   const esc = (x) => String(x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -344,11 +565,21 @@
   function setFinalTexts() {
     if (!state.finalLevel) return;
     $("final-rank").textContent = T("title." + state.finalLevel);
+    const extra = [];
+    if (state.newBest) extra.push(T("result.newBest"));
+    if (state.redoUsed) extra.push(T("result.redo", { n: state.redoUsed }));
+    $("final-extra").textContent = extra.join("　");
     $("result-list").innerHTML = state.results.map(r =>
       `<li><span>${esc(printName(r.print))}</span><span class="s">${"★".repeat(r.rank.stars)} ${esc(T("result.pt", { n: r.score }))}</span></li>`).join("");
   }
   function refreshTexts() {
     titleNote();
+    showBest();
+    if (redo.active) {
+      $("redo-note").textContent = T("redo.note", { n: REDO_MAX - state.redoUsed });
+      if (!redo.busy) $("redo-watch").textContent = T("redo.watch");
+      $("redo-next").textContent = T("redo.next", { s: Math.max(0, redo.left) });
+    }
     if ($("screen-play").classList.contains("active")) {
       setQuestionTexts();
       if (state.revealed) setResultTexts();
@@ -360,4 +591,5 @@
   I18N.onChange(refreshTexts);
   I18N.apply();
   refreshTexts();
+  updateBanner();
 })();

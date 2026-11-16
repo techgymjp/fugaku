@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>富嶽三十六景　富士山どこだっけ？</title>
   <meta name="description" content="富士山が消えた北斎の富嶽三十六景。星座をなぞるように、富士山のシルエットの輪郭をなぞって当てよう。">
   <link rel="stylesheet" href="css/style.css">
@@ -20,33 +20,55 @@
       <p class="sub" data-i18n="title.artist">葛飾北斎</p>
       <h1><span class="main" data-i18n="title.main">富嶽三十六景</span><span class="subtitle" data-i18n="title.sub">富士山どこだっけ？</span></h1>
       <p class="lead" data-i18n-html="title.lead"></p>
-      <div class="menu">
-        <button class="btn primary" data-start="5" data-i18n="mode.5">五問勝負</button>
-        <button class="btn" data-start="10" data-i18n="mode.10">十問勝負</button>
-        <button class="btn" data-start="all" data-i18n="mode.all">全図制覇</button>
+      <div class="menu modes">
+        <div class="mode">
+          <button class="btn primary big" data-start="5" data-i18n="mode.5">五問勝負</button>
+          <span class="best" data-best="5"></span>
+        </div>
+        <div class="mode">
+          <button class="btn big" data-start="10" data-i18n="mode.10">十問勝負</button>
+          <span class="best" data-best="10"></span>
+        </div>
+        <div class="mode">
+          <button class="btn big" data-start="all" data-i18n="mode.all">全図制覇</button>
+          <span class="best" data-best="all"></span>
+        </div>
       </div>
+      <button class="btn howto-btn" id="btn-howto" data-i18n="howto.open">あそびかた</button>
       <p id="title-note" class="note"></p>
-      <button class="link" id="btn-howto" data-i18n="howto.open">遊び方</button>
     </div>
+    <p id="legal" class="legal">
+      <span id="build-info"></span>
+      <a id="privacy-link" href="https://techgym.jp/privacy-policy/" data-i18n="legal.privacy" data-i18n-attr="href:url.privacy" target="_blank" rel="noopener">プライバシーポリシー</a>
+      <span id="ad-privacy" hidden><a href="#" id="ad-privacy-link" data-i18n="legal.adSettings">広告の設定</a></span>
+    </p>
   </section>
 
-  <!-- 遊び方 -->
-  <dialog id="howto">
-    <h2 data-i18n="howto.title">遊び方</h2>
-    <ol>
-      <li data-i18n-html="howto.1"></li>
-      <li data-i18n-html="howto.2"></li>
-      <li data-i18n-html="howto.3"></li>
-      <li data-i18n-html="howto.4"></li>
-      <li id="howto-time" data-i18n-html="howto.5" data-i18n-vars='{"sec":30}'></li>
-    </ol>
-    <form method="dialog"><button class="btn primary" data-i18n="howto.start">はじめる</button></form>
-  </dialog>
+  <!-- あそびかた -->
+  <section id="screen-howto" class="screen">
+    <div class="howto-box">
+      <h2 data-i18n="howto.title">あそびかた</h2>
+      <ol>
+        <li data-i18n-html="howto.1"></li>
+        <li data-i18n-html="howto.2"></li>
+        <li data-i18n-html="howto.3"></li>
+        <li data-i18n-html="howto.4"></li>
+        <li id="howto-time" data-i18n-html="howto.5" data-i18n-vars='{"sec":30}'></li>
+      </ol>
+      <div class="menu">
+        <button class="btn primary" id="btn-howto-start" data-i18n="howto.start">はじめる</button>
+        <button class="btn" id="btn-howto-back" data-i18n="howto.back">もどる</button>
+      </div>
+    </div>
+  </section>
 
   <!-- 出題画面 -->
   <section id="screen-play" class="screen">
     <header class="play-head">
-      <div class="progress"><span id="q-index">1</span> / <span id="q-total">10</span></div>
+      <div class="progress">
+        <button class="pause-btn" id="btn-pause" data-i18n-attr="aria-label:pause.open,title:pause.open">⏸</button>
+        <span><span id="q-index">1</span> / <span id="q-total">10</span></span>
+      </div>
       <div class="q-title">
         <div id="q-name" class="name">？？？</div>
         <div id="q-yomi" class="yomi"></div>
@@ -54,30 +76,51 @@
       <div class="total"><span data-i18n="play.score">得点</span> <span id="score-total">0</span></div>
     </header>
 
-    <div class="stage-wrap">
-      <div id="stage" class="stage">
-        <img id="img-nofuji" alt="富士山が消された浮世絵" data-i18n-attr="alt:play.altNofuji" draggable="false">
-        <img id="img-original" alt="原画" data-i18n-attr="alt:play.altOriginal" draggable="false">
-        <canvas id="canvas"></canvas>
-        <div id="timer" class="timer" aria-live="off"><span class="clock" aria-hidden="true">⏱</span><span id="timer-num">30</span></div>
-        <div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div>
-        <div id="stage-msg" class="stage-msg" hidden></div>
-        <div id="result-badge" class="result-badge" hidden></div>
+    <div class="play-body">
+      <div class="stage-wrap">
+        <div id="stage" class="stage">
+          <img id="img-nofuji" alt="富士山が消された浮世絵" data-i18n-attr="alt:play.altNofuji" draggable="false">
+          <img id="img-original" alt="原画" data-i18n-attr="alt:play.altOriginal" draggable="false">
+          <canvas id="canvas"></canvas>
+          <div id="timer" class="timer" aria-live="off"><span class="clock" aria-hidden="true">⏱</span><span id="timer-num">30</span></div>
+          <div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div>
+          <div id="stage-msg" class="stage-msg" hidden></div>
+          <div id="result-badge" class="result-badge" hidden></div>
+          <!-- リワード広告: 外した絵をもう一度なぞる（アプリのみ） -->
+          <div id="redo" class="redo" hidden>
+            <p id="redo-note"></p>
+            <div class="buttons">
+              <button class="btn primary" id="redo-watch"></button>
+              <button class="btn" id="redo-next"></button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <footer class="play-foot">
+        <p id="hint" class="hint">富士山の輪郭をなぞってください</p>
+        <div class="buttons" id="buttons-draw">
+          <button class="btn" id="btn-undo" data-i18n="play.undo">一筆戻す</button>
+          <button class="btn" id="btn-clear" data-i18n="play.clear">全部消す</button>
+          <button class="btn primary" id="btn-judge" data-i18n="play.judge" disabled>判定</button>
+        </div>
+        <div class="buttons" id="buttons-next" hidden>
+          <button class="btn" id="btn-toggle" data-i18n="play.compare">見比べる</button>
+          <button class="btn primary" id="btn-next">次へ</button>
+        </div>
+      </footer>
     </div>
 
-    <footer class="play-foot">
-      <p id="hint" class="hint">富士山の輪郭をなぞってください</p>
-      <div class="buttons" id="buttons-draw">
-        <button class="btn" id="btn-undo" data-i18n="play.undo">一筆戻す</button>
-        <button class="btn" id="btn-clear" data-i18n="play.clear">全部消す</button>
-        <button class="btn primary" id="btn-judge" data-i18n="play.judge" disabled>判定</button>
+    <!-- ポーズ画面（絵は隠す） -->
+    <div id="pause" class="pause" hidden>
+      <div class="pause-box">
+        <h2 data-i18n="pause.title">一時停止</h2>
+        <div class="menu">
+          <button class="btn primary" id="btn-resume" data-i18n="pause.resume">再開</button>
+          <button class="btn" id="btn-pause-top" data-i18n="pause.top">タイトルへ</button>
+        </div>
       </div>
-      <div class="buttons" id="buttons-next" hidden>
-        <button class="btn" id="btn-toggle" data-i18n="play.compare">見比べる</button>
-        <button class="btn primary" id="btn-next">次へ</button>
-      </div>
-    </footer>
+    </div>
   </section>
 
   <!-- 結果画面 -->
@@ -86,7 +129,12 @@
       <h2 data-i18n="result.title">結果</h2>
       <p class="final"><span id="final-score">0</span><small data-i18n="result.points"> 点</small></p>
       <p id="final-rank" class="final-rank"></p>
+      <p id="final-extra" class="final-extra"></p>
       <ul id="result-list" class="result-list"></ul>
+      <div class="share">
+        <button class="btn share-btn" id="btn-share" data-i18n="share.btn">📤 結果をシェア</button>
+        <p id="share-msg" class="share-msg"></p>
+      </div>
       <div class="menu">
         <button class="btn primary" id="btn-retry" data-i18n="result.retry">もう一度</button>
         <button class="btn" id="btn-top" data-i18n="result.top">タイトルへ</button>
@@ -94,11 +142,14 @@
     </div>
   </section>
 
+  <script src="js/build-info.js"></script>
+  <script src="js/ads-config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/prints.js"></script>
   <script src="js/outlines.js"></script>
   <script src="js/scoring.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/ads.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
