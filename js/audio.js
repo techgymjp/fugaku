@@ -246,7 +246,9 @@
     if (master) master.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05);
     document.querySelectorAll("[data-sound-toggle]").forEach(b => {
       b.textContent = "♪";
-      b.setAttribute("aria-label", on ? "音を消す" : "音を出す");
+      const t = window.I18N ? I18N.t : (k) => (k === "sound.off" ? "音を消す" : "音を出す");
+      b.setAttribute("aria-label", t(on ? "sound.off" : "sound.on"));
+      b.setAttribute("title", t(on ? "sound.off" : "sound.on"));
       b.classList.toggle("off", !on);
     });
   }
@@ -256,7 +258,10 @@
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-sound-toggle]")) setEnabled(!enabled);
   });
-  document.addEventListener("DOMContentLoaded", () => setEnabled(enabled));
+  document.addEventListener("DOMContentLoaded", () => {
+    setEnabled(enabled);
+    if (window.I18N) I18N.onChange(() => setEnabled(enabled));  // ボタンの説明文を言語に合わせる
+  });
 
   window.FujiAudio = {
     unlock, startBgm, stopBgm, startTick, stopTick, setTickSpeed, sfx,

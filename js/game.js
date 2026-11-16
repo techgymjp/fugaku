@@ -8,6 +8,8 @@
   const PLAYABLE = PRINTS.filter(p => Array.isArray(OUTLINES[p.id]) && OUTLINES[p.id].length);
 
   const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, setTickSpeed() {}, unlock() {} };
+  const T = (k, v) => window.I18N.t(k, v);
+  const EN = () => window.I18N.lang === "en";
   const stage = $("stage");
   const canvas = $("canvas");
   const ctx = canvas.getContext("2d");
@@ -38,9 +40,9 @@
   }
 
   // ---------- タイトル ----------
-  $("title-note").textContent = PLAYABLE.length
-    ? `収録 ${PLAYABLE.length} 図`
-    : "正解の輪郭線がまだ登録されていません（editor.html で作成してください）";
+  function titleNote() {
+    $("title-note").textContent = PLAYABLE.length ? T("title.count", { n: PLAYABLE.length }) : T("title.empty");
+  }
   document.querySelectorAll("[data-start]").forEach(b => {
     b.disabled = PLAYABLE.length === 0;
     b.addEventListener("click", () => start(b.dataset.start === "all" ? Infinity : +b.dataset.start));
@@ -102,10 +104,8 @@
     $("buttons-next").hidden = true;
     $("btn-judge").disabled = true;
     $("q-index").textContent = state.index + 1;
-    $("q-name").textContent = p.ja;
-    $("q-yomi").textContent = p.yomi;
-    $("hint").textContent = "富士山の輪郭（稜線）をなぞってください";
-    $("btn-next").textContent = state.index + 1 >= state.total ? "結果を見る" : "次へ";
+    setQuestionTexts();
+    $("hint").textContent = T("play.hint");
     A.startTick();
     startTimer();
 
@@ -118,7 +118,7 @@
     imgNofuji.style.visibility = "hidden";
     imgNofuji.onerror = () => {
       $("stage-msg").hidden = false;
-      $("stage-msg").innerHTML = `<div>富士山を消した画像が見つかりません<br><code>images/nofuji/${p.id}.jpg</code></div>`;
+      $("stage-msg").innerHTML = `<div>${T("play.missing")}<br><code>images/nofuji/${p.id}.jpg</code></div>`;
       // 寸法だけは原画から取る（原画は表示しない）
       if (answer.complete && answer.naturalWidth) setAspect(answer);
       else answer.onload = () => setAspect(answer);
@@ -196,7 +196,8 @@
     const p = state.queue[state.index];
     const res = FujiScoring.evaluate(toPx(OUTLINES[p.id]), toPx(state.strokes));
     const rk = FujiScoring.rank(res.score);
-    if (timedOut && !state.strokes.length) rk.label = "時間切れ";
+    if (timedOut && !state.strokes.length) rk.key = "timeout";
+    state.last = { res, rk, timedOut };
     A.stopTick();
     A.sfx.reveal();
     state.results.push({ print: p, score: res.score, rank: rk });
@@ -206,12 +207,12 @@
     $("stage-msg").hidden = true;
     $("buttons-draw").hidden = true;
     $("buttons-next").hidden = false;
-    $("hint").textContent = (timedOut ? "時間切れ！　" : "") + `なぞり具合 ${Math.round(res.coverage * 100)}%　／　正確さ ${Math.round(res.precision * 100)}%`;
+    setResultTexts();
     $("score-total").textContent = state.results.reduce((s, r) => s + r.score, 0);
 
     const badge = $("result-badge");
     badge.className = "result-badge" + (rk.hit ? "" : " miss");
-    badge.innerHTML = `<div class="pt">${res.score}</div><div class="lb">${"★".repeat(rk.stars)}${rk.label}</div>`;
+
 
     // 輪郭線を星座のように描き出すアニメーション
     const t0 = performance.now();
@@ -312,16 +313,51 @@
     const sum = state.results.reduce((s, r) => s + r.score, 0);
     const avg = state.results.length ? sum / state.results.length : 0;
     $("final-score").textContent = sum;
-    $("final-rank").textContent =
-      avg >= 85 ? "称号：画狂老人（北斎級）" :
-      avg >= 70 ? "称号：富士見の達人" :
-      avg >= 50 ? "称号：江戸の旅人" :
-      avg >= 30 ? "称号：駆け出しの絵師" : "称号：富士山はどこへ…";
-    $("result-list").innerHTML = state.results.map(r =>
-      `<li><span>${r.print.ja}</span><span class="s">${"★".repeat(r.rank.stars)} ${r.score}点</span></li>`).join("");
+    state.finalLevel = avg >= 85 ? 1 : avg >= 70 ? 2 : avg >= 50 ? 3 : avg >= 30 ? 4 : 5;
+    setFinalTexts();
     show("screen-result");
     stopTimer(); A.stopTick(); A.stopBgm(); A.sfx.final();
   }
   $("btn-retry").addEventListener("click", () => start(state.lastMode));
   $("btn-top").addEventListener("click", () => { A.sfx.click(); stopTimer(); A.stopTick(); A.stopBgm(); show("screen-title"); });
+
+  // ---------- 言語の切り替え ----------
+  const esc = (x) => String(x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const printName = (p) => (EN() ? p.en : p.ja);
+
+  function setQuestionTexts() {
+    const p = state.queue[state.index];
+    if (!p) return;
+    // 英語では英題を大きく、和題を小さく。日本語では和題と読み
+    $("q-name").textContent = printName(p);
+    $("q-yomi").textContent = EN() ? p.ja : p.yomi;
+    $("btn-next").textContent = T(state.index + 1 >= state.total ? "play.toResult" : "play.next");
+  }
+  function setResultTexts() {
+    if (!state.last) return;
+    const { res, rk, timedOut } = state.last;
+    $("hint").textContent = (timedOut ? T("play.timeUp") : "") +
+      T("play.stats", { cov: Math.round(res.coverage * 100), prec: Math.round(res.precision * 100) });
+    const badge = $("result-badge");
+    badge.innerHTML = `<div class="pt">${res.score}</div><div class="lb">${"★".repeat(rk.stars)}${esc(T("rank." + rk.key))}</div>`;
+  }
+  function setFinalTexts() {
+    if (!state.finalLevel) return;
+    $("final-rank").textContent = T("title." + state.finalLevel);
+    $("result-list").innerHTML = state.results.map(r =>
+      `<li><span>${esc(printName(r.print))}</span><span class="s">${"★".repeat(r.rank.stars)} ${esc(T("result.pt", { n: r.score }))}</span></li>`).join("");
+  }
+  function refreshTexts() {
+    titleNote();
+    if ($("screen-play").classList.contains("active")) {
+      setQuestionTexts();
+      if (state.revealed) setResultTexts();
+      else $("hint").textContent = T("play.hint");
+    }
+    if ($("screen-result").classList.contains("active")) setFinalTexts();
+  }
+  $("howto-time").dataset.i18nVars = JSON.stringify({ sec: TIME_LIMIT });
+  I18N.onChange(refreshTexts);
+  I18N.apply();
+  refreshTexts();
 })();

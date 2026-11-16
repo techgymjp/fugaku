@@ -92,11 +92,12 @@
   }
 
   function rank(score) {
-    if (score >= 92) return { label: "神業！", stars: 3, hit: true };
-    if (score >= 80) return { label: "お見事！", stars: 2, hit: true };
-    if (score >= 65) return { label: "当たり", stars: 1, hit: true };
-    if (score >= 35) return { label: "惜しい…", stars: 0, hit: false };
-    return { label: "はずれ", stars: 0, hit: false };
+    // key は表示用の言語ごとの文言（js/i18n.js の rank.*）を引くためのもの
+    if (score >= 92) return { key: "god", label: "神業！", stars: 3, hit: true };
+    if (score >= 80) return { key: "great", label: "お見事！", stars: 2, hit: true };
+    if (score >= 65) return { key: "hit", label: "当たり", stars: 1, hit: true };
+    if (score >= 35) return { key: "close", label: "惜しい…", stars: 0, hit: false };
+    return { key: "miss", label: "はずれ", stars: 0, hit: false };
   }
 
   const api = { evaluate, rank, resample };
