@@ -7,6 +7,7 @@
   // 正解の輪郭線が登録済みの絵だけを出題する
   const PLAYABLE = PRINTS.filter(p => Array.isArray(OUTLINES[p.id]) && OUTLINES[p.id].length);
 
+  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, unlock() {} };
   const stage = $("stage");
   const canvas = $("canvas");
   const ctx = canvas.getContext("2d");
@@ -41,9 +42,10 @@
     b.disabled = PLAYABLE.length === 0;
     b.addEventListener("click", () => start(b.dataset.start === "all" ? Infinity : +b.dataset.start));
   });
-  $("btn-howto").addEventListener("click", () => $("howto").showModal());
+  $("btn-howto").addEventListener("click", () => { A.unlock(); A.sfx.click(); $("howto").showModal(); });
 
   function start(n) {
+    A.unlock(); A.sfx.start(); A.startBgm();
     state.lastMode = n;
     state.queue = shuffle(PLAYABLE.slice()).slice(0, Math.min(n, PLAYABLE.length));
     state.total = state.queue.length;
@@ -126,6 +128,7 @@
     if (!state.current) return;
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     for (const ev of events) state.current.push(toNorm(ev));
+    A.sfx.draw(state.current[state.current.length - 1][1]);
     draw();
   });
   const endStroke = () => {
@@ -138,8 +141,8 @@
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointercancel", endStroke);
 
-  $("btn-undo").addEventListener("click", () => { state.strokes.pop(); $("btn-judge").disabled = !state.strokes.length; draw(); });
-  $("btn-clear").addEventListener("click", () => { state.strokes = []; $("btn-judge").disabled = true; draw(); });
+  $("btn-undo").addEventListener("click", () => { A.sfx.undo(); state.strokes.pop(); $("btn-judge").disabled = !state.strokes.length; draw(); });
+  $("btn-clear").addEventListener("click", () => { A.sfx.undo(); state.strokes = []; $("btn-judge").disabled = true; draw(); });
 
   // ---------- 判定 ----------
   // 縦横比を保ったピクセル空間（幅1000）に変換して採点
@@ -152,6 +155,7 @@
     const p = state.queue[state.index];
     const res = FujiScoring.evaluate(toPx(OUTLINES[p.id]), toPx(state.strokes));
     const rk = FujiScoring.rank(res.score);
+    A.sfx.reveal();
     state.results.push({ print: p, score: res.score, rank: rk });
     state.revealed = true;
     stage.classList.add("revealed");
@@ -171,13 +175,14 @@
       state.revealProgress = Math.min(1, (t - t0) / 1600);
       draw();
       if (state.revealProgress < 1) state.anim = requestAnimationFrame(step);
-      else badge.hidden = false;
+      else { badge.hidden = false; A.sfx.result(rk.stars, rk.hit); }
     };
     state.anim = requestAnimationFrame(step);
   }
 
-  $("btn-toggle").addEventListener("click", () => stage.classList.toggle("compare"));
+  $("btn-toggle").addEventListener("click", () => { A.sfx.click(); stage.classList.toggle("compare"); });
   $("btn-next").addEventListener("click", () => {
+    A.sfx.click();
     state.index++;
     if (state.index >= state.total) showResult(); else loadQuestion();
   });
@@ -271,7 +276,8 @@
     $("result-list").innerHTML = state.results.map(r =>
       `<li><span>${r.print.ja}</span><span class="s">${"★".repeat(r.rank.stars)} ${r.score}点</span></li>`).join("");
     show("screen-result");
+    A.stopBgm(); A.sfx.final();
   }
   $("btn-retry").addEventListener("click", () => start(state.lastMode));
-  $("btn-top").addEventListener("click", () => show("screen-title"));
+  $("btn-top").addEventListener("click", () => { A.sfx.click(); A.stopBgm(); show("screen-title"); });
 })();

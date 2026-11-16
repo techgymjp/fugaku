@@ -27,6 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 #   join:   [i, j] 番目の線をつないで1つの範囲にする（雲などで稜線が途切れている図）
 #   stroke: True なら稜線の墨線だけを消す（山肌が紙の地色と同じ図）
 #   band:   稜線から下へこの幅だけ消す（山の中にいる図）
+#   strips: [x0, x1, y0, y1] 空の見本から細い横帯を切り出し、ずらしながら積み重ねて埋める
+#   clip:   消す範囲をこの多角形の内側に限る（紙の白い縁を残す）
+#   feather: 消した範囲の境目をぼかす幅（px）
 #   tile:   [x0, x1, y1, ywrap] 空だけが写っている四角の模様を繰り返して埋める
 #           （富士山が画面の大半を占める図）
 #   extra:  ほかに消す多角形のリスト（湖に映った逆さ富士など）
@@ -37,7 +40,7 @@ ROOT = Path(__file__).resolve().parent.parent
 #   pad:    範囲を外側へ広げる幅（px）
 FULL = [[0.0, 1.0], [1.0, 1.0]]
 OVERRIDES = {
-    "gaifu": {"base": FULL, "extra": [[[0.14, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.36], [0.14, 0.36]]], "tile": [0.14, 0.50, 0.30, 0.04]},
+    "gaifu": {"base": FULL, "extra": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]], "clip": [[0.011, 0.014], [0.989, 0.014], [0.989, 0.984], [0.011, 0.984]], "protect": [[[0.045, 0.045], [0.145, 0.045], [0.145, 0.33], [0.045, 0.33]]], "strips": [0.16, 0.62, 0.04, 0.34], "feather": 4, "pad": 0},
     "sanka": {"base": FULL, "extra": [[[0.0, 0.40], [0.21, 0.40], [0.21, 0.02], [1.0, 0.02], [1.0, 1.0], [0.0, 1.0]]], "vref": [0.25, 0.45, 0, 0.29]},
     "tozan": {"vref": [0.30, 0.45, 0, 0.36], "band": 0.08},
     "kajikazawa": {"vref": [0.40, 0.45]},
@@ -226,11 +229,67 @@ def fill_vref(img, mask, x0, x1, tol=110.0, ymax=None, sample=4):
     return out
 
 
+def fill_strips(img, mask, x0, x1, y0, y1, strip=0.03, seed=1):
+    """マスクされた範囲を、空の見本 [x0,x1)×[y0,y1) から切り出した細い横帯を
+    ランダムにずらして積み重ね、継ぎ目をぼかしてつないだ模様で埋める。
+    （凱風快晴のように、横にたなびく雲が画面いっぱいに広がる図用）"""
+    rng = np.random.default_rng(seed)
+    h, w = mask.shape
+    src = img[int(y0 * h):int(y1 * h), int(x0 * w):int(x1 * w)].astype(np.float32)
+    sh, sw = src.shape[:2]
+    sth = max(8, int(strip * h))
+    ov = max(3, sth // 3)          # 帯どうしの重なり（上下）
+    hov = max(20, sw // 6)         # 横につなぐときの重なり
+    out = img.astype(np.float32).copy()
+    canvas = np.zeros((h, w, 3), np.float32)
+    weight = np.zeros((h, w, 1), np.float32)
+
+    def row_band(sy):
+        """見本の sy 行目から高さ sth+ov の帯を取り、横に何枚かつないで幅 w 以上にする。"""
+        band = src[sy:sy + sth + ov]
+        pieces, total = [], 0
+        while total < w + hov:
+            off = rng.integers(0, max(1, sw // 3))
+            piece = band[:, off:]
+            pieces.append(piece)
+            total += piece.shape[1] - hov
+        row = pieces[0]
+        ramp = np.linspace(0, 1, hov)[None, :, None]
+        for pc in pieces[1:]:
+            blend = row[:, -hov:] * (1 - ramp) + pc[:, :hov] * ramp
+            row = np.concatenate([row[:, :-hov], blend, pc[:, hov:]], axis=1)
+        return row[:, :w]
+
+    y = 0
+    while y < h:
+        sy = int(rng.integers(0, max(1, sh - sth - ov)))
+        band = row_band(sy)
+        hh = min(band.shape[0], h - y)
+        wv = np.ones((hh, 1, 1), np.float32)
+        r = np.linspace(0, 1, ov)[:, None, None]
+        if y > 0:
+            wv[:min(ov, hh)] = r[:min(ov, hh)]
+        if hh == band.shape[0]:
+            wv[-ov:] = r[::-1]
+        canvas[y:y + hh] += band[:hh] * wv
+        weight[y:y + hh] += wv
+        y += sth
+    canvas /= np.maximum(weight, 1e-3)
+    m = mask > 0
+    out[m] = canvas[m]
+    return out
+
+
 def make(pid, lines, opt):
     src = ROOT / f"images/original/{pid}.jpg"
     img = cv2.imread(str(src))
     h, w = img.shape[:2]
     mask = region_mask(lines, w, h, opt)
+    if "clip" in opt:
+        # 紙の白い縁は残す
+        cm = np.zeros_like(mask)
+        cv2.fillPoly(cm, [np.round(np.array([[x * w, y * h] for x, y in opt["clip"]])).astype(np.int32)], 255)
+        mask[cm == 0] = 0
     for poly in opt.get("protect", []):
         pm = np.zeros_like(mask)
         cv2.fillPoly(pm, [np.round(np.array([[x * w, y * h] for x, y in poly])).astype(np.int32)], 255)
@@ -244,7 +303,10 @@ def make(pid, lines, opt):
             keep = (g - r > 20) & (np.abs(g - b) < 35)
         keep = cv2.dilate(keep.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
         mask[keep] = 0
-    if "vref" in opt:
+    if "strips" in opt:
+        filled = fill_strips(img, mask, *opt["strips"])
+        smooth = filled
+    elif "vref" in opt:
         filled = fill_vref(img, mask, *opt["vref"])
         smooth = cv2.GaussianBlur(filled, (1, 5), 0)
     elif "tile" in opt:
@@ -259,7 +321,7 @@ def make(pid, lines, opt):
     grain = rng.normal(0, 3.0, filled.shape).astype(np.float32)
     patch = np.clip(smooth + grain, 0, 255)
     # 境目をぼかして合成
-    alpha = cv2.GaussianBlur(mask.astype(np.float32) / 255, (0, 0), 1.2)[..., None]
+    alpha = cv2.GaussianBlur(mask.astype(np.float32) / 255, (0, 0), opt.get("feather", 1.2))[..., None]
     out = img.astype(np.float32) * (1 - alpha) + patch * alpha
     dst = ROOT / f"images/nofuji/{pid}.jpg"
     cv2.imwrite(str(dst), np.clip(out, 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 90])
