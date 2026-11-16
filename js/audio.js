@@ -140,6 +140,48 @@
     setTimeout(() => { if (!bgmOn) bgmGain.gain.value = 0.22; }, 1500);
   }
 
+  // ---- 時計のカチカチ（問題を解いている間） ----
+  let noiseBuf = null, tickTimer = 0, tickOn = false, nextTick = 0, tickN = 0;
+  function noise() {
+    if (noiseBuf) return noiseBuf;
+    const len = Math.floor(ctx.sampleRate * 0.05);
+    noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return noiseBuf;
+  }
+  // 短い打撃音（ノイズ＋高い共鳴）で、時計の歯車の「カチ」を作る
+  function tick(t, hi) {
+    const src = ctx.createBufferSource(); src.buffer = noise();
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass";
+    bp.frequency.value = hi ? 3200 : 2300; bp.Q.value = 8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(hi ? 0.9 : 0.7, t + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    src.connect(bp); bp.connect(g); g.connect(master);  // 残響はかけず、乾いた音にする
+    src.start(t); src.stop(t + 0.05);
+  }
+  function scheduleTick() {
+    if (!tickOn) return;
+    while (nextTick < ctx.currentTime + 0.3) {
+      tick(nextTick, tickN % 2 === 0);
+      nextTick += 1.0; tickN++;
+    }
+  }
+  function startTick() {
+    if (!init()) return;
+    stopTick();
+    tickOn = true; tickN = 0;
+    nextTick = ctx.currentTime + 0.5;
+    tickTimer = setInterval(scheduleTick, 100);
+    scheduleTick();
+  }
+  function stopTick() {
+    tickOn = false;
+    clearInterval(tickTimer);
+  }
+
   // ---- 効果音 ----
   let lastDraw = 0, drawDeg = 0;
   const sfx = {
@@ -206,7 +248,7 @@
   document.addEventListener("DOMContentLoaded", () => setEnabled(enabled));
 
   window.FujiAudio = {
-    unlock, startBgm, stopBgm, sfx,
+    unlock, startBgm, stopBgm, startTick, stopTick, sfx,
     get enabled() { return enabled; },
   };
 })();

@@ -7,7 +7,7 @@
   // 正解の輪郭線が登録済みの絵だけを出題する
   const PLAYABLE = PRINTS.filter(p => Array.isArray(OUTLINES[p.id]) && OUTLINES[p.id].length);
 
-  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, unlock() {} };
+  const A = window.FujiAudio || { sfx: new Proxy({}, { get: () => () => {} }), startBgm() {}, stopBgm() {}, startTick() {}, stopTick() {}, unlock() {} };
   const stage = $("stage");
   const canvas = $("canvas");
   const ctx = canvas.getContext("2d");
@@ -73,6 +73,7 @@
     $("q-yomi").textContent = p.yomi;
     $("hint").textContent = "富士山の輪郭（稜線）をなぞってください";
     $("btn-next").textContent = state.index + 1 >= state.total ? "結果を見る" : "次へ";
+    A.startTick();
 
     imgOriginal.src = `images/original/${p.id}.jpg`;
     imgNofuji.onerror = () => {
@@ -155,6 +156,7 @@
     const p = state.queue[state.index];
     const res = FujiScoring.evaluate(toPx(OUTLINES[p.id]), toPx(state.strokes));
     const rk = FujiScoring.rank(res.score);
+    A.stopTick();
     A.sfx.reveal();
     state.results.push({ print: p, score: res.score, rank: rk });
     state.revealed = true;
@@ -276,8 +278,8 @@
     $("result-list").innerHTML = state.results.map(r =>
       `<li><span>${r.print.ja}</span><span class="s">${"★".repeat(r.rank.stars)} ${r.score}点</span></li>`).join("");
     show("screen-result");
-    A.stopBgm(); A.sfx.final();
+    A.stopTick(); A.stopBgm(); A.sfx.final();
   }
   $("btn-retry").addEventListener("click", () => start(state.lastMode));
-  $("btn-top").addEventListener("click", () => { A.sfx.click(); A.stopBgm(); show("screen-title"); });
+  $("btn-top").addEventListener("click", () => { A.sfx.click(); A.stopTick(); A.stopBgm(); show("screen-title"); });
 })();
