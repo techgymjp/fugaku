@@ -11,11 +11,11 @@ window.Ads = (() => {
         rewarded: 'ca-app-pub-3940256099942544/5224354917',
         banner: 'ca-app-pub-3940256099942544/6300978111',
       },
-      // 本番の広告ユニット(AdMob の Android アプリ「富嶽三十六景 富士山どこだっけ？」)。届いたら入れる(空の種類は出さない)
+      // 本番の広告ユニット(AdMob の Android アプリ「富嶽三十六景 富士山どこだっけ？」)。空の種類は出さない
       production: {
         interstitial: '',
         rewarded: '',
-        banner: '',
+        banner: 'ca-app-pub-6411535997477460/8949869731',
       },
     },
     ios: {
