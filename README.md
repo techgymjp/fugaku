@@ -101,6 +101,7 @@ AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml` の `adm
 アイコンと起動画面は `python3 tools/make_icons.py` で `assets/` に元画像を作り、`npx @capacitor/assets generate --android` で生成しています。
 
 Web 版（GitHub Pages）はこれまでどおりリポジトリのルートをそのまま公開しています（ビルド不要。Capacitor がないので広告などは動きません）。
+Web 版のタイトル画面の左上には Google Play へのリンク（https://play.google.com/store/apps/details?id=jp.techgym.fugaku ）を出しています。`<!-- web-only -->` などの目印で囲んであり、アプリ用のビルドでは取り除きます。
 
 ## ライセンス
 

@@ -73,6 +73,10 @@
       "share.redo": "（やり直し{n}回）",
       "share.copied": "結果をコピーしました！SNSに貼り付けてください",
       "share.copyFail": "コピーできませんでした",
+      // web-only:start
+      "store.get": "Android アプリ版",
+      "store.name": "Google Play で入手",
+      // web-only:end
       "legal.privacy": "プライバシーポリシー",
       "legal.adSettings": "広告の設定",
       "url.privacy": "https://techgym.jp/privacy-policy/",
@@ -150,6 +154,10 @@
       "share.redo": " ({n} retries)",
       "share.copied": "Copied! Paste it into your social media",
       "share.copyFail": "Could not copy",
+      // web-only:start
+      "store.get": "GET IT ON",
+      "store.name": "Google Play",
+      // web-only:end
       "legal.privacy": "Privacy Policy",
       "legal.adSettings": "Ad settings",
       "url.privacy": "https://techgym.jp/privacy-policy-en/",

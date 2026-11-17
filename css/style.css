@@ -269,3 +269,26 @@ dialog form { text-align: center; margin-top: 12px; }
 /* 縦向き・パソコン: 出題画面は上から 帯・絵・操作 */
 .play-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 @media (orientation: landscape) and (max-height: 500px) { .play-body { flex-direction: row; } }
+
+/* web-only:start */
+/* Web 版のタイトル画面の左上に Google Play へのリンク（アプリ用のビルドでは取り除く） */
+.store-link {
+  position: absolute; left: 12px; top: 10px; z-index: 2;
+  display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px;
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.6); background: rgba(0,0,0,.75);
+  color: #fff; font-family: sans-serif; text-decoration: none; line-height: 1.15;
+}
+.store-link:hover { background: rgba(0,0,0,.9); }
+.store-link .gp { font-size: 22px; color: #34d17a; }
+.store-link small { display: block; font-size: 10px; opacity: .85; }
+.store-link b { font-size: 15px; }
+@media (max-width: 640px) {
+  /* スマホ縦では右上のボタンと重ならないよう、タイトルの箱の上に出す */
+  #screen-title { padding-top: 64px; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  /* 横向きのスマホでもタイトルの箱と重ならないよう、箱を少し下げる */
+  #screen-title { padding-top: 52px; }
+  .store-link { top: 6px; left: 8px; padding: 4px 12px 4px 8px; }
+}
+/* web-only:end */
