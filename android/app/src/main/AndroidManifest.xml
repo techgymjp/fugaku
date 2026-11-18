@@ -36,4 +36,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 画面は横向き固定（sensorLandscape）だが、横向き・縦向きの画面を持つことは必須ではない。
+         これがないと Google Play が「横向きの画面が必須」とみなし、一部の端末（Chromebook など）で入手できなくなる -->
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 </manifest>
