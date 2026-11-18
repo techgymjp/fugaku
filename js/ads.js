@@ -14,7 +14,7 @@ window.Ads = (() => {
       // 本番の広告ユニット(AdMob の Android アプリ「富嶽三十六景 富士山どこだっけ？」)。空の種類は出さない
       production: {
         interstitial: 'ca-app-pub-6411535997477460/1800535279',
-        rewarded: 'ca-app-pub-6411535997477460/4475117303',
+        rewarded: 'ca-app-pub-6411535997477460/8992629587',
         banner: 'ca-app-pub-6411535997477460/5007659255',
       },
     },
